@@ -1,9 +1,7 @@
 -- Version 0.8b --
 [U] Added /resize command 
 [U] Modified Graphics
-[U] Added Developermode (self only)
 [U] Changed slash commands to reduce clutter
-[U]
 
 -- Slash Commands --
 
@@ -12,21 +10,9 @@
 /ezs background - toggles background on and off
 /ezs sounds - toggles sounds on and off
 /ezs notifications - toggles notificcations on and off
-/ezs resize - toggles resize mode
-/ezs options - [DEVELOPERMODE ONLY]
 
 --Wishlist--
 
 1. Notifications above OR below the bar
 2. Smart circles - dont show empty circles, only owned circles
 3. Options menu - reduce use of /commands to almost nil.
-
-
--- Todo before release: (thursday push?) --
-
-Wishlist 1 / Testing.
-
-
-Release 0.9 with include a much more customisable UI including Wishlist 2 / 3. .8x releases will focus on
-bug fixes and learning.
-

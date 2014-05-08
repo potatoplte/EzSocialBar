@@ -40,7 +40,7 @@ function EzSocialBar:new(o)
 	self.settings = {
 		position = { 
 			top = -3,
-			left = -600,
+			left = -620,
 			right = 2,
 			bottom = 70,
  		},
@@ -51,7 +51,7 @@ function EzSocialBar:new(o)
 		notificationDuration = 5,
 		updateFreq = 5,
 		enableNotifications = true,
-		developerMode = true, -- !!!! Remember to change this !!!
+		developerMode = false, -- !!!! Remember to change this !!!
 		isResizeable = false,
 	}
 	
@@ -214,19 +214,23 @@ function EzSocialBar:EzSlashCommand(sCmd, sInput)
 	elseif s == "background" then
 		self.settings.displayBackground = not self.settings.displayBackground
 		self:ApplySettings()
-	
+		
 	-- Toggle Sound
 	elseif s == "sounds" then
 		self.settings.playSound = not self.settings.playSound	
-	
-	-- Notifications toggle
+		if self.settings.playSound then
+			CPrint("Sounds Enabled")
+		else
+			CPrint("Sounds Disabled")		
+		end
+	-- Notifications toggle [DEV]
 	elseif s == "notifications" then
 		self.settings.enableNotifications = not self.settings.enableNotifications
 
-	--resizing
-	elseif s == "resize" then
+	--resizing [DEV]
+	elseif s == "resize" and self.settings.developerMode then		
 		self.settings.isResizeable = not self.settings.isResizeable --toggle
-		self:ApplySettings()
+		self:ApplySettings()		
 	
 	elseif s == "options" and self.settings.developerMode then
 		self:ShowOptions()
