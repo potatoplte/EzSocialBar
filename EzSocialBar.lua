@@ -89,7 +89,7 @@ end
 
 function EzSocialBar:OnRestore(eType, tData)
 	--CPrint("Restoring saved state::")	
-	for Dkey, Dvalue in pairs(defaultSettings) do
+	for Dkey, Dvalue in pairs(self.settings) do
 		if tData[Dkey] ~= nil then
 			self.settings[Dkey] = tData[Dkey]
 		end
