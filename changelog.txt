@@ -1,8 +1,5 @@
--- Version 0.8c --
-[*] Added an Options Menu (see / commands)
-[*] Fixed Notifications & associated Timer
-[*] Fixed an error with AccountFriendRequests
-[*] Position, background, lock state and sounds should now all be saved when you relog and persist
+-- Version 0.8d --
+[*] Fixed a crash when a friend comes online
 
 -- Slash Commands --
 

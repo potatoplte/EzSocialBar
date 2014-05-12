@@ -499,7 +499,7 @@ function EzSocialBar:OnFriendshipUpdateOnline(nFriendId)
 	-- use the ID to get the friends name from Friendship lib	
 	--  show notifcation displaying Player has come online
 	local tFriend = FriendshipLib.GetById(nFriendId)
-	CPrint("OnFriendshipUpdateOnline nFriendId=" .. nFriendID)
+	--CPrint("OnFriendshipUpdateOnline nFriendId=" .. nFriendID)
 	--If he is not our friend?
 	--   honestly, idk, i found this in FriendsList - wut do
 	if not tFriend.bFriend then
