@@ -4,12 +4,6 @@
 ----------------------------------------------------------------------------------------------- 
 require "Window"
 
--- todo
--- ShowNotification isnt working, possibly need another way of showing these
---  See if Guild invite is acctually needed, if i am invited to a circle do i get a notification about it?
---  Any way to tell when a guild member has come/gone on/offline?
---  Friends - Account vs Friends can we check the two for cross overs? e.g. done see Dark 2x if i have his acc and main character
- 
 -----------------------------------------------------------------------------------------------
 -- EzSocialBar Module Definition
 -----------------------------------------------------------------------------------------------
@@ -28,7 +22,6 @@ function EzSocialBar:new(o)
     self.__index = self 
 
     -- initialize variables here
-	self.TimerName = "EzSocialUpdateTimer"
 	self.onlineFriendsCount = 0
 	self.accountOnlineFriendsCount = 0
 	self.onlineGuildCount = 0
@@ -51,7 +44,7 @@ function EzSocialBar:new(o)
 		notificationDuration = 5,
 		updateFreq = 5,
 		enableNotifications = true,
-		developerMode = false, -- !!!! Remember to change this !!!
+		developerMode = true, -- !!!! Remember to change this !!!
 		isResizeable = false,
 	}
 	
@@ -88,22 +81,13 @@ function EzSocialBar:OnSave(eType)
 end
 
 function EzSocialBar:OnRestore(eType, tData)
-	--CPrint("Restoring saved state::")	
-	for Dkey, Dvalue in pairs(self.settings) do
-		if tData[Dkey] ~= nil then
-			self.settings[Dkey] = tData[Dkey]
-		end
-	end 
-	
+	self.settings = tData	
 	self:ApplySettings()
 end
 
 
 function EzSocialBar:ApplySettings()		
-		--set the position of the window		
-		--CPrint(string.format("Setting Pos: l:%i t:%i b:%i r:%i", self.settings.position.left, self.settings.position.top,
-						 --self.settings.position.right, self.settings.position.bottom))			
-						
+		--set the position of the window
 		self.wndMain:SetAnchorOffsets(
 			self.settings.position.left,
 		 	self.settings.position.top,
@@ -162,17 +146,28 @@ function EzSocialBar:OnDocLoaded()
 		self.circleDisplays[5] = self.wndMain:FindChild("btnHoldC5")
 		
 		--The notification Window
-		self.notificationTimerName = "EzSocialNotificationTimer"
-		self.notifcationTimer = nil;
 		self.notificationWindow = self.wndMain:FindChild("EzSocialNotification")
 		self.notificationWindow:Show(false)
 		self.notification = self.notificationWindow:FindChild("NotificationText")
-		self.mailControl = self.wndMain:FindChild("mailControl")
-		self:HideMailIcon()	
 		
-		--timer handlers
-		Apollo.RegisterTimerHandler(self.notificationTimerName, "OnNotificationTimerTick", self)
-		Apollo.RegisterTimerHandler(self.TimerName, "OnEzTimerTick", self)
+		self.friendsControl = self.wndMain:FindChild("friendsIco")
+		self:SetFriendsPending(0)
+		
+		self.mailControl = self.wndMain:FindChild("mailControl")
+		self:SetMailIcon(0)	
+		
+		self.optionsWindow = Apollo.LoadForm(self.xmlDoc, "EzSocialSettings", nil, self)
+		self.optionsWindow:Show(false)
+		
+		--timer handlers		
+		self.updateTimer = Apollo.CreateTimer("EzUpdateTimer", 1, true)
+		self.notifcationTimer = Apollo.CreateTimer("NotificationTimer", 10.0, false)
+		
+		Apollo.RegisterTimerHandler("NotificationTimer", "OnNotificationTimerTick", self)
+		Apollo.RegisterTimerHandler("EzUpdateTimer", "OnEzTimerTick", self)
+		
+		Apollo.StartTimer("EzUpdateTimer")
+		Apollo.StopTimer("NotificationTimer")
 
 		-- register for some apollo events
 		Apollo.RegisterEventHandler("FriendshipUpdateOnline", "OnFriendshipUpdateOnline", self)		
@@ -182,8 +177,6 @@ function EzSocialBar:OnDocLoaded()
 		-- Setup the Interface initally & create the Timer
 		self:UpdateValues()
 		self:UpdateInterface()
-		self:CreateUpdateTimer()
-
 	end
 end
 
@@ -223,61 +216,55 @@ function EzSocialBar:EzSlashCommand(sCmd, sInput)
 		else
 			CPrint("Sounds Disabled")		
 		end
-	-- Notifications toggle [DEV]
+	-- Notifications toggle 
 	elseif s == "notifications" then
 		self.settings.enableNotifications = not self.settings.enableNotifications
+	
+	-- Options
+	elseif s == "options" then
+		self:ShowOptions()	
 
-	--resizing [DEV]
+	-- Notify [DEV]
+	elseif s == "notify" and self.settings.developerMode then
+		self:CalcFriendInvites(2) -- delta testing
+
+	-- Resizing [DEV]
 	elseif s == "resize" and self.settings.developerMode then		
 		self.settings.isResizeable = not self.settings.isResizeable --toggle
-		self:ApplySettings()		
-	
-	elseif s == "options" and self.settings.developerMode then
-		self:ShowOptions()
-	end		
-
-end
-
--- CreateUpdateTimer
---  Creates a new updat Timer for the Social Panel
-function EzSocialBar:CreateUpdateTimer()	
-	if self.updateTimer ~= nil then
-		Apollo.StopTimer(self.TimerName)
+		self:ApplySettings()
+				
 	end
-
-	self.updateTimer = Apollo.CreateTimer(self.TimerName, self.settings.notificationDuration, true)	
 end
 
--- ShowNotification(text, duration)
+-- SetNotification(text, duration)
 --  Shows a notification for a short duration
-function EzSocialBar:HideNotification()
-	Apollo.StopTimer(self.notificationTimerName)
-	self.notificationWindow:Show(false)
-end
-
-function EzSocialBar:ShowNotification(text)
-	-- if one is already shown, stop timer and restart with new text, duration
-	if self.notificationTimer ~= nil then
-		Apollo.StopTimer(self.notificationTimerName)
-	end
-	
+function EzSocialBar:SetNotification(text)	
 	-- is settings enabled
 	if not self.settings.enableNotifications then
+		return
+	end
+	
+	if text == nil or text == "" then		
+		self.notificationWindow:Show(false)
 		return
 	end
 	
 	-- show a notification
 	self.notificationWindow:Show(true)
 	self.notification:SetText(text)
-	self.notifcationTimer = Apollo.CreateTimer(self.notificationTimerName, self.settings.notificationDuration, true)	
-	--Apollo.StartTimer(self.notificationTimerName)
+	Apollo.StartTimer("NotificationTimer")
+	
+	if self.settings.playSound then 
+		Sound.Play(Sound.PlayUISocialFriendAlert)
+	end
 end
 
 -- OnNotificationTimerTick(
 --  Handles the closing down of the Notification
 function EzSocialBar:OnNotificationTimerTick()
 	-- stop the timer, turn off the notification
-	self:HideNotification()
+	Apollo.StopTimer("NotificationTimer")
+	self:SetNotification("")	
 end
 
 
@@ -290,22 +277,20 @@ function EzSocialBar:UpdateValues()
 	self.onlineFriendsCount = 0
 	self.accountOnlineFriendsCount = 0;
 	
-	--CPrint("Friends: " .. #FriendshipLib.GetList())
 	for key, tFriend in pairs(FriendshipLib.GetList()) do
-		if tFriend .fLastOnline == 0 then
+		if tFriend.fLastOnline == 0 then
 			self.onlineFriendsCount = self.onlineFriendsCount + 1
 		end
 	end
 	
-	--Account Friends
-	--CPrint("Acc Friends: " .. #FriendshipLib.GetAccountList())
+	--Account Friends	
 	for key, tAccFriend in pairs(FriendshipLib.GetAccountList()) do
-		if tAccFriend.fLastOnline == 0 then
+		if tAccFriend.arCharacters == 0 then -- changed from fLastOnline, i assume arCharacter is a list of character which is nil if they aare offline?
 			self.accountOnlineFriendsCount = self.accountOnlineFriendsCount + 1
 		end
 	end		
 	
-	-- Guild Member Count
+	
 	local guild = nil
 	local circle = 1
 		
@@ -379,21 +364,48 @@ function EzSocialBar:UpdateInterface()
 	end
 	
 	--Mail
-	self:ShowMailIcon(self.UnreadMessages)
+	self:SetMailIcon(self.UnreadMessages)
 end
 
-function EzSocialBar:HideMailIcon()
-	self.mailControl:Show(false)
-end
-
-function EzSocialBar:ShowMailIcon(nMail)
+function EzSocialBar:SetMailIcon(nMail)
 	if nMail == 0 then
-		self:HideMailIcon()
+		self.mailControl:Show(false)
 		return
 	end	
 	
 	self.mailControl:FindChild("mailText"):SetText("" .. nMail)
 	self.mailControl:Show(true)	
+end
+
+function EzSocialBar:SetFriendsPending(nFriends)
+	local friendsRotateyThingy = self.friendsControl:FindChild("invites")
+	local friendsPendingCtrl = self.friendsControl:FindChild("friendsPending")
+	
+	if nFriends == 0 then
+		friendsRotateyThingy:Show(false)
+		friendsPendingCtrl:Show(false)
+	else
+		friendsRotateyThingy:Show(true)
+		friendsPendingCtrl:Show(true)
+		friendsPendingCtrl:SetText(nFriends .. "")
+	end	
+end
+
+function EzSocialBar:CalcFriendInvites(nDelta)
+	--nDelta is a testin value
+	local nUnseenFriendInviteCount = 0
+	for idx, tInvite in pairs(FriendshipLib.GetInviteList()) do
+		if tInvite.bIsNew then
+			nUnseenFriendInviteCount = nUnseenFriendInviteCount + 1
+		end
+	end
+	for idx, tInvite in pairs(FriendshipLib.GetAccountInviteList()) do
+		if tInvite.bIsNew then
+			nUnseenFriendInviteCount = nUnseenFriendInviteCount + 1
+		end
+	end
+
+	self:SetFriendsPending(nUnseenFriendInviteCount + nDelta)
 end
 
 -----------------------------------------------------------------------------------------------
@@ -411,35 +423,24 @@ function EzSocialBar:OnFriendshipUpdateOnline(nFriendId)
 	end
 	
 	if tFriend.fLastOnline == 0 then --just come online
-		self:ShowNotification(string.format("%s has come Online", tFriend.strCharacterName))
+		self:SetNotification(string.format("%s has come Online", tFriend.strCharacterName))
 	else
-		self:ShowNotification(string.format("%s has gone Offline", tFriend.strCharacterName))
-	end
-	
-	--Play a sound ??
-	if self.settings.playSound then 
-		Sound.Play(Sound.PlayUISocialFriendAlert)
+		self:SetNotification(string.format("%s has gone Offline", tFriend.strCharacterName))
 	end
 end
 
 function EzSocialBar:OnFriendshipRequest(tRequest)	
 	--Friend has been Requested	
-	self:ShowNotification(string.format("New friendship request from %s", tRequest.strCharacterName))	
-	if self.settings.playSound then 
-		Sound.Play(Sound.PlayUISocialFriendAlert)
-	end		
+	self:SetNotification(string.format("New friendship request from %s", tRequest.strCharacterName))
+	self:CalcFriendInvites(0)
 end
 
 function EzSocialBar:OnFriendshipAccountInvitesRecieved(tInviteList)
-	if #tInviteList == 1 then
-		self:ShowNotification(string.format("New account request from %s", tInviteList[1].strCharacterName))
-	else
-		self:ShowNotification("New account requests!")
-	end
 	
-	if self.settings.playSound then 
-		Sound.Play(Sound.PlayUISocialFriendAlert)
-	end
+	for id, tInvite in pairs(tInviteList) do
+		self:SetNotification(string.format("New account request from %s", tInviteList[1].strCharacterName))
+	end		
+	self:CalcFriendInvites(0)
 end
 
 -----------------------------------------------------------------------------------------------
@@ -464,7 +465,7 @@ end
 
 -- has clicked the notification, register as seen and hide
 function EzSocialBar:OnNotificationClick( wndHandler, wndControl, eMouseButton, nLastRelativeMouseX, nLastRelativeMouseY, bDoubleClick, bStopPropagation )
-	self:HideNotification()
+	self:SetNotification("")
 end
 
 function EzSocialBar:OnMailIconClick( wndHandler, wndControl, eMouseButton, nLastRelativeMouseX, nLastRelativeMouseY, bDoubleClick, bStopPropagation )
@@ -490,9 +491,38 @@ function EzSocialBar:ShowOptions()
 	if not self.settings.developerMode then
 		return
 	end
+	
+	self.optionsWindow:FindChild("toggleLock"):SetCheck(self.settings.isLocked)
+	self.optionsWindow:FindChild("toggleBackground"):SetCheck(self.settings.displayBackground)
+	self.optionsWindow:FindChild("toggleSounds"):SetCheck(self.settings.playSound)
+	self.optionsWindow:FindChild("toggleNotifications"):SetCheck(self.settings.enableNotifications)
+	self.optionsWindow:Show(true)	
+end
 
-	self.optionsWindow = Apollo.LoadForm(self.xmlDoc, "EzSocialSettings", nil, self)	
-	self.optionsWindow:Show(true)
+---------------------------------------------------------------------------------------------------
+-- EzSocialSettings Functions
+---------------------------------------------------------------------------------------------------
+function EzSocialBar:OnLockToggle(wndHandler, wndControl, eMouseButton )	
+	self.settings.isLocked = wndControl:IsChecked()
+	self:ApplySettings()
+end
+
+function EzSocialBar:OnBackgroundToggle( wndHandler, wndControl, eMouseButton )
+	self.settings.displayBackground = wndControl:IsChecked()
+	self:ApplySettings()
+end
+
+function EzSocialBar:OnSoundsToggle( wndHandler, wndControl, eMouseButton )
+	self.settings.playSound = wndControl:IsChecked()
+	self:ApplySettings()
+end
+
+function EzSocialBar:OnNotificationsToggle( wndHandler, wndControl, eMouseButton )
+	self.settings.enableNotifications = wndControl:IsChecked()
+	self:ApplySettings()
+end
+function EzSocialBar:OnOptionsClose( wndHandler, wndControl, eMouseButton )
+	self.optionsWindow:Show(false)
 end
 
 -----------------------------------------------------------------------------------------------
