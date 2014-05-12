@@ -66,7 +66,7 @@
                 <Event Name="ButtonCheck" Function="OnBackgroundToggle"/>
                 <Event Name="ButtonUncheck" Function="OnBackgroundToggle"/>
             </Control>
-            <Control Class="Button" Base="BK3:btnHolo_Check" Font="DefaultButton" ButtonType="Check" RadioGroup="" LAnchorPoint="0" LAnchorOffset="40" TAnchorPoint="0" TAnchorOffset="145" RAnchorPoint="1" RAnchorOffset="0" BAnchorPoint="0" BAnchorOffset="180" DT_VCENTER="1" DT_CENTER="0" BGColor="UI_BtnBGDefault" TextColor="UI_BtnTextDefault" NormalTextColor="UI_BtnTextDefault" PressedTextColor="UI_BtnTextDefault" FlybyTextColor="UI_BtnTextDefault" PressedFlybyTextColor="UI_BtnTextDefault" DisabledTextColor="UI_BtnTextDefault" TooltipType="OnCursor" Name="toggleSounds" TooltipColor="" Picture="1" DrawAsCheckbox="1" UseTemplateBG="1" Text="    Play Sounds [Experiemental]" TextId="">
+            <Control Class="Button" Base="BK3:btnHolo_Check" Font="DefaultButton" ButtonType="Check" RadioGroup="" LAnchorPoint="0" LAnchorOffset="40" TAnchorPoint="0" TAnchorOffset="145" RAnchorPoint="1" RAnchorOffset="0" BAnchorPoint="0" BAnchorOffset="180" DT_VCENTER="1" DT_CENTER="0" BGColor="UI_BtnBGDefault" TextColor="UI_BtnTextDefault" NormalTextColor="UI_BtnTextDefault" PressedTextColor="UI_BtnTextDefault" FlybyTextColor="UI_BtnTextDefault" PressedFlybyTextColor="UI_BtnTextDefault" DisabledTextColor="UI_BtnTextDefault" TooltipType="OnCursor" Name="toggleSounds" TooltipColor="" Picture="1" DrawAsCheckbox="1" UseTemplateBG="1" Text="    Play Sounds" TextId="">
                 <Event Name="ButtonCheck" Function="OnSoundsToggle"/>
                 <Event Name="ButtonUncheck" Function="OnSoundsToggle"/>
             </Control>

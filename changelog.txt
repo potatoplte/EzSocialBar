@@ -1,10 +1,14 @@
--- Version 0.8b --
-[U] Added /resize command 
-[U] Modified Graphics
-[U] Changed slash commands to reduce clutter
+-- Version 0.8c --
+[*] Added an Options Menu (see / commands)
+[*] Fixed Notifications & associated Timer
+[*] Fixed an error with AccountFriendRequests
+[*] Position, background, lock state and sounds should now all be saved when you relog and persist
 
 -- Slash Commands --
 
+/ezs options - opens the options menu
+
+-- all slash commands are avalaible via the options menu --
 /ezs lock
 /ezs unlock
 /ezs background - toggles background on and off
@@ -14,5 +18,4 @@
 --Wishlist--
 
 1. Notifications above OR below the bar
-2. Smart circles - dont show empty circles, only owned circles
-3. Options menu - reduce use of /commands to almost nil.
+2. Smart circles - dont show empty circles, only owned circles 

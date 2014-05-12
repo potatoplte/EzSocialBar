@@ -12,6 +12,63 @@ local EzSocialBar = {}
 local function CPrint(string)
 	ChatSystemLib.PostOnChannel(ChatSystemLib.ChatChannel_Command, string, "")
 end
+
+function table.val_to_str ( v )
+  if "string" == type( v ) then
+    v = string.gsub( v, "\n", "\\n" )
+    if string.match( string.gsub(v,"[^'\"]",""), '^"+$' ) then
+      return "'" .. v .. "'"
+    end
+    return '"' .. string.gsub(v,'"', '\\"' ) .. '"'
+  else
+    return "table" == type( v ) and table.tostring( v ) or
+      tostring( v )
+  end
+end
+
+function table.key_to_str ( k )
+  if "string" == type( k ) and string.match( k, "^[_%a][_%a%d]*$" ) then
+    return k
+  else
+    return "[" .. table.val_to_str( k ) .. "]"
+  end
+end
+
+function table.tostring( tbl )
+  local result, done = {}, {}
+  for k, v in ipairs( tbl ) do
+    table.insert( result, table.val_to_str( v ) )
+    done[ k ] = true
+  end
+  for k, v in pairs( tbl ) do
+    if not done[ k ] then
+      table.insert( result,
+        table.key_to_str( k ) .. "=" .. table.val_to_str( v ) )
+    end
+  end
+  return "{" .. table.concat( result, "," ) .. "}"
+end
+
+
+local DefaultSettings =
+{
+	position = { 
+		top = -3,
+		left = -620,
+		right = 2,
+		bottom = 70,
+		},
+	
+	displayBackground = true,
+	isLocked = true,
+	playSound = false,
+	notificationDuration = 5,
+	updateFreq = 5,
+	enableNotifications = true,
+	developerMode = false, -- !!!! Remember to change this !!!
+	isResizeable = false,
+}
+
  
 -----------------------------------------------------------------------------------------------
 -- Initialization
@@ -29,14 +86,13 @@ function EzSocialBar:new(o)
 	self.circleMemberStatuses =  { false, false, false, false, false}	
 	self.circleMembers =  { 0, 0, 0, 0, 0 }	
 	self.UnreadMessages = 0
-	
 	self.settings = {
 		position = { 
 			top = -3,
 			left = -620,
 			right = 2,
 			bottom = 70,
- 		},
+			},
 		
 		displayBackground = true,
 		isLocked = true,
@@ -44,10 +100,10 @@ function EzSocialBar:new(o)
 		notificationDuration = 5,
 		updateFreq = 5,
 		enableNotifications = true,
-		developerMode = true, -- !!!! Remember to change this !!!
+		developerMode = false, -- !!!! Remember to change this !!!
 		isResizeable = false,
 	}
-	
+
     return o
 end
 
@@ -73,7 +129,7 @@ end
 
 function EzSocialBar:OnSave(eType)
 	--CPrint("saving state::")
-	if etype ~= GameLib.CodeEnumAddonSaveLevel.Character then
+	if eType ~= GameLib.CodeEnumAddonSaveLevel.Character then
 		return nil
 	else
 		return self.settings
@@ -81,8 +137,15 @@ function EzSocialBar:OnSave(eType)
 end
 
 function EzSocialBar:OnRestore(eType, tData)
-	self.settings = tData	
-	self:ApplySettings()
+	if eType ~= GameLib.CodeEnumAddonSaveLevel.Character then return end
+	
+	for Dkey, Dvalue in pairs(self.settings) do
+		if tData[Dkey] ~= nil then
+			self.settings[Dkey] = tData[Dkey]
+		end
+	end 
+		
+	--self:ApplySettings()
 end
 
 
@@ -170,11 +233,18 @@ function EzSocialBar:OnDocLoaded()
 		Apollo.StopTimer("NotificationTimer")
 
 		-- register for some apollo events
-		Apollo.RegisterEventHandler("FriendshipUpdateOnline", "OnFriendshipUpdateOnline", self)		
-		Apollo.RegisterEventHandler("FriendshipRequest", "OnFriendshipRequest", self)		
+		Apollo.RegisterEventHandler("FriendshipUpdateOnline", "OnFriendshipUpdateOnline", self)	
+
+		Apollo.RegisterEventHandler("FriendshipInvitesRecieved", "OnFriendshipRequest", self)		
 		Apollo.RegisterEventHandler("FriendshipAccountInvitesRecieved", "OnFriendshipAccountInvitesRecieved", self)
 				
 		-- Setup the Interface initally & create the Timer
+		if self.settings == nil then
+			self.settings = DefaultSettings
+		else
+			self:ApplySettings()
+		end
+		
 		self:UpdateValues()
 		self:UpdateInterface()
 	end
@@ -190,7 +260,7 @@ function EzSocialBar:EzSlashCommand(sCmd, sInput)
 	
 	if s == nil or s == "" then
 		CPrint("EzSocial Addon")
-		CPrint("do /ezs refresh")
+		CPrint("do /ezs options for options menu")
 	elseif s == "refresh" then
 		self:UpdateValues()
 		self:UpdateInterface()
@@ -232,7 +302,9 @@ function EzSocialBar:EzSlashCommand(sCmd, sInput)
 	elseif s == "resize" and self.settings.developerMode then		
 		self.settings.isResizeable = not self.settings.isResizeable --toggle
 		self:ApplySettings()
-				
+		
+	elseif s == "derp" and self.settings.developerMode then		
+		CPrint(table.tostring(FriendshipLib.GetAccountInviteList()))				
 	end
 end
 
@@ -285,7 +357,7 @@ function EzSocialBar:UpdateValues()
 	
 	--Account Friends	
 	for key, tAccFriend in pairs(FriendshipLib.GetAccountList()) do
-		if tAccFriend.arCharacters == 0 then -- changed from fLastOnline, i assume arCharacter is a list of character which is nil if they aare offline?
+		if tAccFriend.arCharacters then -- changed from fLastOnline == 0, i assume arCharacter is a list of character which is nil if they are offline?
 			self.accountOnlineFriendsCount = self.accountOnlineFriendsCount + 1
 		end
 	end		
@@ -365,6 +437,7 @@ function EzSocialBar:UpdateInterface()
 	
 	--Mail
 	self:SetMailIcon(self.UnreadMessages)
+	self:CalcFriendInvites(0)
 end
 
 function EzSocialBar:SetMailIcon(nMail)
@@ -393,19 +466,30 @@ end
 
 function EzSocialBar:CalcFriendInvites(nDelta)
 	--nDelta is a testin value
-	local nUnseenFriendInviteCount = 0
+	local lastUnseen = ""
+	local nUnseenFriendInviteCount = nDelta
+	
 	for idx, tInvite in pairs(FriendshipLib.GetInviteList()) do
 		if tInvite.bIsNew then
 			nUnseenFriendInviteCount = nUnseenFriendInviteCount + 1
+			lastUnseen  = tInvite.strCharacterName
 		end
-	end
+	end	
+
 	for idx, tInvite in pairs(FriendshipLib.GetAccountInviteList()) do
 		if tInvite.bIsNew then
 			nUnseenFriendInviteCount = nUnseenFriendInviteCount + 1
+			lastUnseen = tInvite.strDisplayName
 		end
 	end
 
-	self:SetFriendsPending(nUnseenFriendInviteCount + nDelta)
+	self:SetFriendsPending(nUnseenFriendInviteCount)
+	
+	if nUnseenFriendInviteCount == 1 then
+		self:SetNotification(string.format("Friendship invite from " .. lastUnseen))
+	elseif nUnseenFriendInviteCount  > 1 then
+		self:SetNotification(string.format("%i Friendship invites pending", nUnseenFriendInviteCount))
+	end
 end
 
 -----------------------------------------------------------------------------------------------
@@ -415,31 +499,29 @@ function EzSocialBar:OnFriendshipUpdateOnline(nFriendId)
 	-- use the ID to get the friends name from Friendship lib	
 	--  show notifcation displaying Player has come online
 	local tFriend = FriendshipLib.GetById(nFriendId)
-	
+	CPrint("OnFriendshipUpdateOnline nFriendId=" .. nFriendID)
 	--If he is not our friend?
 	--   honestly, idk, i found this in FriendsList - wut do
 	if not tFriend.bFriend then
 		return
 	end
 	
+	--self:CalcFriendInvites(0)	
 	if tFriend.fLastOnline == 0 then --just come online
 		self:SetNotification(string.format("%s has come Online", tFriend.strCharacterName))
 	else
 		self:SetNotification(string.format("%s has gone Offline", tFriend.strCharacterName))
 	end
+	
 end
 
 function EzSocialBar:OnFriendshipRequest(tRequest)	
 	--Friend has been Requested	
-	self:SetNotification(string.format("New friendship request from %s", tRequest.strCharacterName))
+	--self:SetNotification(string.format("New friendship request from %s", tRequest.strCharacterName))
 	self:CalcFriendInvites(0)
 end
 
-function EzSocialBar:OnFriendshipAccountInvitesRecieved(tInviteList)
-	
-	for id, tInvite in pairs(tInviteList) do
-		self:SetNotification(string.format("New account request from %s", tInviteList[1].strCharacterName))
-	end		
+function EzSocialBar:OnFriendshipAccountInvitesRecieved(tInviteList)			
 	self:CalcFriendInvites(0)
 end
 
@@ -488,10 +570,7 @@ end
 function EzSocialBar:ShowOptions() 
 	-- only developer options atm
 	-- if you change to dev mode, strange things will happen
-	if not self.settings.developerMode then
-		return
-	end
-	
+		
 	self.optionsWindow:FindChild("toggleLock"):SetCheck(self.settings.isLocked)
 	self.optionsWindow:FindChild("toggleBackground"):SetCheck(self.settings.displayBackground)
 	self.optionsWindow:FindChild("toggleSounds"):SetCheck(self.settings.playSound)
