@@ -49,6 +49,16 @@ function table.tostring( tbl )
   end
   return "{" .. table.concat( result, "," ) .. "}"
 end
+function table.reverse ( tab )
+    local size = #tab
+    local newTable = {}
+ 
+    for i,v in ipairs ( tab ) do
+        newTable[size-i] = v
+    end
+ 
+    return newTable
+end
 
 --Default Settings
 local DefaultSettings = {	
@@ -95,9 +105,7 @@ function EzSocialBar:new(o)
 		accountOnlineFriendsCount = 0,
 		onlineGuildCount = 0,
 		hasGuild = false,
-		circleMemberStatuses =  { false, false, false, false, false},
-		circleMembers =  { 0, 0, 0, 0, 0 },	
-		circleNames = { },
+		circles =  { },		
 		UnreadMessages = 0,
 	}		
 		
@@ -156,7 +164,6 @@ function EzSocialBar:ApplySettings()
 	end	
 			
 	--set the position of the window
-	self.mainContainer:FindChild("EzSocialBar"):SetAnchorPoints(0, 0, 1, .5)
 	self.mainContainer:SetAnchorOffsets(
 		self.settings.position.left,
 	 	self.settings.position.top,
@@ -242,14 +249,12 @@ function EzSocialBar:BuildSocialBar()
 	
 	if self.settings.noduleStates.Circles then
 		local circlesCount = 0
-	 	for i = 1, 5 do
-			if self.data.circleMemberStatuses[i] then
-				ctrl, w = self:BuildItem("CircleNodule", "Circle_" .. i, container)
-				ctrl:SetAnchorPoints(0, 0, 0, 1)
-				ctrl:SetAnchorOffsets(currentWidth, 0, currentWidth + w, 0)	
-				currentWidth = currentWidth + w	
-				circlesCount = circlesCount + 1		
-			end
+	 	for i = 1, #self.data.circles do			
+			ctrl, w = self:BuildItem("CircleNodule", "Circle_" .. i, container)
+			ctrl:SetAnchorPoints(0, 0, 0, 1)
+			ctrl:SetAnchorOffsets(currentWidth, 0, currentWidth + w, 0)	
+			currentWidth = currentWidth + w	
+			circlesCount = circlesCount + 1	
 		end	
 	end	
 	
@@ -384,6 +389,11 @@ end
 -----------------------------------------------------------------------------------------------
 function EzSocialBar:OnEzTimerTick()
 	self:UpdateData()
+	
+	if not self.IsBarLoaded then
+		self:BuildSocialBar()
+	end	
+	
 	self:UpdateInterface()
 end
 
@@ -409,12 +419,10 @@ function EzSocialBar:UpdateInterface()
 	
 	--Update Circles interface
 	if self.settings.noduleStates.Circles then		
-		for i = 1, 5 do
-			if self.data.circleMemberStatuses[i] then
-				local wnd = self.mainContainer:FindChild("Circle_"..i)				
-				wnd:SetText(string.format("%u", self.data.circleMembers[i]))
-				wnd:SetTooltip(self.data.circleNames[i])
-			end
+		for i = 1, #self.data.circles do			
+			local wnd = self.mainContainer:FindChild("Circle_"..i)				
+			wnd:SetText(string.format("%u", self.data.circles[i].count))
+			wnd:SetTooltip(self.data.circles[i].name)
 		end
 	end
 	
@@ -446,23 +454,18 @@ function EzSocialBar:UpdateData()
 		local circle = 1
 		
 		--init circles
-		for i = 1, 5 do
-			self.data.circleMemberStatuses[i] = false
-			self.data.circleMembers[i] = 0
-		end
+		self.data.circles = { }
 		
 		--data
 		for idx, guildCurr in pairs(GuildLib.GetGuilds()) do
 			if guildCurr:GetType() == GuildLib.GuildType_Guild then
 				guild = guildCurr
 			elseif guildCurr:GetType() == GuildLib.GuildType_Circle then
-				self.data.circleMemberStatuses[circle] = true
-				self.data.circleMembers[circle] = guildCurr:GetOnlineMemberCount()
-				self.data.circleNames[circle] = guildCurr:GetName()
+				self.data.circles[circle] = { name=guildCurr:GetName(), count=guildCurr:GetOnlineMemberCount() } 				
 				circle = circle  + 1
 			end
-		end
-		
+		end		
+		--table.reverse(self.data.circles)		
 		-- assign guild numbers
 		if guild == nil then
 			self.hasGuild = false
@@ -623,17 +626,14 @@ end
 function EzSocialBar:OnShowFriendsToggle( wndHandler, wndControl, eMouseButton )
 	self.settings.noduleStates.Friends = wndControl:IsChecked()
 	self.IsBarLoaded = false
-	self:ApplySettings()
 end
 function EzSocialBar:OnShowGuildToggle( wndHandler, wndControl, eMouseButton )
 	self.settings.noduleStates.Guild = wndControl:IsChecked()
 	self.IsBarLoaded = false
-	self:ApplySettings()
 end
 function EzSocialBar:OnShowCirclesToggle( wndHandler, wndControl, eMouseButton )
 	self.settings.noduleStates.Circles = wndControl:IsChecked()
 	self.IsBarLoaded = false
-	self:ApplySettings()
 end
 
 -----------------------------------------------------------------------------------------------
