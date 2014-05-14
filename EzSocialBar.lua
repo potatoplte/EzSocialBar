@@ -77,17 +77,17 @@ local DefaultSettings = {
 		isResizeable = false,
 		showMail = true,
 	}
- 
+	
+local LoadingState = { Unloaded = 1, Restore = 2, Loaded = 4 }	
 -----------------------------------------------------------------------------------------------
 -- Initialization
 -----------------------------------------------------------------------------------------------
 function EzSocialBar:new(o)
     o = o or {}
     setmetatable(o, self)
-    self.__index = self 
-	self.IsBarLoaded = false -- indicated if BuildSocialBar has been called, prevents StackOverflow
-	self.AreSettingsLoaded = false --are settings loaded, prevents the race condition from Restore and Loaded
-
+    self.__index = self 	
+	self.LoadingState = LoadingState.Unloaded	
+		
     -- varaibles holding display data
 	self.settings = nil			
 	self.data = {
@@ -97,6 +97,7 @@ function EzSocialBar:new(o)
 		hasGuild = false,
 		circleMemberStatuses =  { false, false, false, false, false},
 		circleMembers =  { 0, 0, 0, 0, 0 },	
+		circleNames = { },
 		UnreadMessages = 0,
 	}		
 		
@@ -123,37 +124,23 @@ function EzSocialBar:OnSave(eType)
 	end		
 end
 function EzSocialBar:OnRestore(eType, tData)
-	if eType ~= GameLib.CodeEnumAddonSaveLevel.Character then return end
-	
-	if self.settings == nil then self.settings = DefaultSettings end
-	
+	if eType ~= GameLib.CodeEnumAddonSaveLevel.Character then 
+		return 
+	end		
+
+	--Load in settings
+	self.settings = DefaultSettings 	
 	for Dkey, Dvalue in pairs(self.settings) do
 		if tData[Dkey] ~= nil then
 			self.settings[Dkey] = tData[Dkey]
 		end
-	end 
-	
-	-- we have loaded data, stop the timer for race condition
-	Apollo.StopTimer("EzLoaderTimer")	
-	self.AreSettingsLoaded = true	
-	self:ApplySettings()
+	end		
 end
 
 -----------------------------------------------------------------------------------------------
 -- EzSocialBar ApplySettings
 -----------------------------------------------------------------------------------------------
-function EzSocialBar:ApplySettings()
-	-- if settings have not been loaded, dont do a thing
-	if not self.AreSettingsLoaded then return end
-	
-	-- foce an update on self.data
-	self:OnEzTimerTick()
-	
-	-- if the bar has not been built, then load it.	
-	if not self.IsBarLoaded then	
-		self:BuildSocialBar()
-	end
-
+function EzSocialBar:ApplySettings()	
 	--movable
 	if self.settings.isLocked then
 		self.mainContainer:RemoveStyle("Moveable")
@@ -175,7 +162,6 @@ function EzSocialBar:ApplySettings()
 	 	self.settings.position.top,
 		self.settings.position.right,
 	 	self.settings.position.bottom)
-
 end
 
 -----------------------------------------------------------------------------------------------
@@ -184,8 +170,7 @@ end
 function EzSocialBar:OnDocLoaded()
 	if self.xmlDoc ~= nil and self.xmlDoc:IsLoaded() then
 	    self.mainContainer = Apollo.LoadForm(self.xmlDoc, "EzSocialBarForm", nil, self)				
-	    self.mainContainer:Show(true)
-	
+	    self.mainContainer:Show(true)	
 		self.background = self.mainContainer:FindChild("Background")
 		self.mailControl = self.mainContainer:FindChild("MailNodule")
 		self.notificationsWindow = self.mainContainer:FindChild("EzSocialNotification")
@@ -193,14 +178,7 @@ function EzSocialBar:OnDocLoaded()
 		self.optionsWindow:Show(false)
 		self.notificationsWindow:Show(false)		
 		self:SetMailIcon(0)
-			
-		if not self.AreSettingsLoaded then
-			--settings have not been loaded.
-			-- we should start a 5s timer, in this time settings are either going to be loaded or not.
-			Apollo.CreateTimer("EzLoaderTimer", 5, false)
-			Apollo.RegisterTimerHandler("EzLoaderTimer", "OnEzLoaderTimerExpire", self)		
-		end		
-				
+
 		--timer handlers		
 		Apollo.CreateTimer("EzUpdateTimer", 1, true)
 		Apollo.CreateTimer("NotificationTimer", 10.0, false)		
@@ -213,11 +191,17 @@ function EzSocialBar:OnDocLoaded()
 		Apollo.RegisterEventHandler("FriendshipUpdateOnline", "OnFriendshipUpdateOnline", self)	
 		Apollo.RegisterEventHandler("FriendshipInvitesRecieved", "OnFriendshipRequest", self)		
 		Apollo.RegisterEventHandler("FriendshipAccountInvitesRecieved", "OnFriendshipAccountInvitesRecieved", self)
-		
+					
+		self:UpdateData()
+		self:BuildSocialBar()
+		self:UpdateInterface()
+		Apollo.StartTimer("EzUpdateTimer")	
+
 	end
 end
 
 function EzSocialBar:OnEzLoaderTimerExpire()
+	CPrint("EzLoaderTimer")
 	if self.AreSettingsLoaded then
 		-- all is ok!
 		Apollo.StopTimer("EzLoaderTimer")
@@ -257,13 +241,10 @@ function EzSocialBar:BuildSocialBar()
 	end
 	
 	if self.settings.noduleStates.Circles then
-		CPrint("Building Circle Windows")
 		local circlesCount = 0
 	 	for i = 1, 5 do
-			CPrint("" .. i)
 			if self.data.circleMemberStatuses[i] then
 				ctrl, w = self:BuildItem("CircleNodule", "Circle_" .. i, container)
-				CPrint("" .. i)				
 				ctrl:SetAnchorPoints(0, 0, 0, 1)
 				ctrl:SetAnchorOffsets(currentWidth, 0, currentWidth + w, 0)	
 				currentWidth = currentWidth + w	
@@ -283,9 +264,7 @@ function EzSocialBar:BuildItem(type, name, parent)
 	local newItem = Apollo.LoadForm(self.xmlDoc, type, parent, self)
 	
 	if newItem == nil then
-		CPrint("Failed to create" .. name)
-	else
-		CPrint("Created " .. name)			
+		CPrint("Failed to create" .. name)		
 	end
 	
 	newItem:SetName(name)
@@ -403,7 +382,47 @@ end
 -----------------------------------------------------------------------------------------------
 -- EzSocialBar UpdateValues
 -----------------------------------------------------------------------------------------------
-function EzSocialBar:OnEzTimerTick()	
+function EzSocialBar:OnEzTimerTick()
+	self:UpdateData()
+	self:UpdateInterface()
+end
+
+function EzSocialBar:UpdateInterface()
+	if self.settings.noduleStates.Friends then
+		--Update Friends interface
+		local totalFriends = self.data.onlineFriendsCount + self.data.accountOnlineFriendsCount	
+		if totalFriends > 0 then
+			self.mainContainer:FindChild("FriendsView"):FindChild("Text"):SetText(string.format("Friends: %u", totalFriends))
+		else
+			self.mainContainer:FindChild("FriendsView"):FindChild("Text"):SetText("Friends: --")
+		end	
+	end
+	
+	--Update Guilds interface
+	if self.settings.noduleStates.Guild then
+		if self.hasGuild then
+			self.mainContainer:FindChild("GuildsView"):FindChild("Text"):SetText(string.format("Guild: %u", self.onlineGuildCount));
+		else
+			self.mainContainer:FindChild("GuildsView"):FindChild("Text"):SetText("Guild: --");
+		end			
+	end	
+	
+	--Update Circles interface
+	if self.settings.noduleStates.Circles then		
+		for i = 1, 5 do
+			if self.data.circleMemberStatuses[i] then
+				local wnd = self.mainContainer:FindChild("Circle_"..i)				
+				wnd:SetText(string.format("%u", self.data.circleMembers[i]))
+				wnd:SetTooltip(self.data.circleNames[i])
+			end
+		end
+	end
+	
+	--Mail
+	self:SetMailIcon(self.data.UnreadMessages)	
+	
+end
+function EzSocialBar:UpdateData()	
 	-- First Friends, only bother to update if we are showing the values	
 	if self.settings.noduleStates.Friends then	
 		self.data.onlineFriendsCount = 0
@@ -418,15 +437,7 @@ function EzSocialBar:OnEzTimerTick()
 			if tAccFriend.arCharacters then 
 				self.data.accountOnlineFriendsCount = self.data.accountOnlineFriendsCount + 1
 			end
-		end
-			
-		--Update Friends interface
-		local totalFriends = self.data.onlineFriendsCount + self.data.accountOnlineFriendsCount	
-		if totalFriends > 0 then
-			self.mainContainer:FindChild("FriendsView"):FindChild("Text"):SetText(string.format("Friends: %u", totalFriends))
-		else
-			self.windows.Friends:FindChild("FriendsView"):FindChild("Text"):SetText("Friends: --")
-		end			
+		end	
 	end
 
 	-- Next Guilds
@@ -447,6 +458,7 @@ function EzSocialBar:OnEzTimerTick()
 			elseif guildCurr:GetType() == GuildLib.GuildType_Circle then
 				self.data.circleMemberStatuses[circle] = true
 				self.data.circleMembers[circle] = guildCurr:GetOnlineMemberCount()
+				self.data.circleNames[circle] = guildCurr:GetName()
 				circle = circle  + 1
 			end
 		end
@@ -460,28 +472,6 @@ function EzSocialBar:OnEzTimerTick()
 			self.onlineGuildCount = guild:GetOnlineMemberCount()
 		end	
 		
-		--Update Guilds interface
-		if self.settings.noduleStates.Guild then
-			if self.hasGuild then
-				self.mainContainer:FindChild("GuildsView"):FindChild("Text"):SetText(string.format("Guild: %u", self.onlineGuildCount));
-			else
-				self.mainContainer:FindChild("GuildsView"):FindChild("Text"):SetText("Guild: --");
-			end			
-		end	
-		
-		--Update Circles interface
-		if self.settings.noduleStates.Circles then		
-			for i = 1, 5 do
-				if self.data.circleMemberStatuses[i] then
-					local wnd = self.mainContainer:FindChild("Circle_"..i)
-					if wnd == nil then
-						CPrint("Error Circle_" .. i .. " was not found on window")
-					else
-						wnd:SetText(string.format("%u", self.data.circleMembers[i]))	
-					end
-				end
-			end
-		end
 	end
 	
 	--Mail
@@ -493,10 +483,7 @@ function EzSocialBar:OnEzTimerTick()
 			if tMessageInfo and not tMessageInfo.bIsRead then
 				self.data.UnreadMessages = self.data.UnreadMessages + 1
 			end
-		end
-		
-		--Mail
-		self:SetMailIcon(self.data.UnreadMessages)			
+		end	
 	end	
 end
 
