@@ -157,7 +157,7 @@ function EzSocialBar:ApplySettings()
 	end
 	
 	-- show background	
-	if self.settings.displayBackground then	
+	if self.settings.displayBackground then
 		self.background:Show(true)
 	else
 		self.background:Show(false)
@@ -178,7 +178,7 @@ function EzSocialBar:OnDocLoaded()
 	if self.xmlDoc ~= nil and self.xmlDoc:IsLoaded() then
 	    self.mainContainer = Apollo.LoadForm(self.xmlDoc, "EzSocialBarForm", nil, self)				
 	    self.mainContainer:Show(true)	
-		self.background = self.mainContainer:FindChild("Background")
+		self.background = self.mainContainer:FindChild("SocialbarBackground")
 		self.mailControl = self.mainContainer:FindChild("MailNodule")
 		self.notificationsWindow = self.mainContainer:FindChild("EzSocialNotification")
 		self.optionsWindow = Apollo.LoadForm(self.xmlDoc, "EzSocialSettingsForm", nil, self)
@@ -195,9 +195,12 @@ function EzSocialBar:OnDocLoaded()
 		Apollo.StopTimer("EzUpdateTimer")
 
 		-- Register for some Events
+		Apollo.RegisterEventHandler("InterfaceMenuListHasLoaded", "OnInterfaceMenuListHasLoaded", self)
+		
 		Apollo.RegisterEventHandler("FriendshipUpdateOnline", "OnFriendshipUpdateOnline", self)	
 		Apollo.RegisterEventHandler("FriendshipInvitesRecieved", "OnFriendshipRequest", self)		
 		Apollo.RegisterEventHandler("FriendshipAccountInvitesRecieved", "OnFriendshipAccountInvitesRecieved", self)
+		
 					
 		self:UpdateData()
 		self:BuildSocialBar()
@@ -231,6 +234,7 @@ function EzSocialBar:BuildSocialBar()
 	
 	-- Build Friends Bar
 	if self.settings.noduleStates.Friends then	 
+		--CPrint("Building Friends nodule")
 		ctrl, w = self:BuildItem("FriendsNodule", "FriendsView", container)
 		ctrl:SetAnchorPoints(0, 0, 0, 1)
 		ctrl:SetAnchorOffsets(currentWidth, 0, currentWidth + w, 0)
@@ -240,6 +244,7 @@ function EzSocialBar:BuildSocialBar()
 	
 	-- Build Guilds Bar
 	if self.settings.noduleStates.Guild then
+		--CPrint("Building Guild nodule")
 		ctrl, w = self:BuildItem("GuildsNodule", "GuildsView", container)
 		ctrl:SetAnchorPoints(0, 0, 0, 1)
 		ctrl:SetAnchorOffsets(currentWidth, 0, currentWidth + w, 0)
@@ -247,7 +252,13 @@ function EzSocialBar:BuildSocialBar()
 		--assign to the windows
 	end
 	
-	if self.settings.noduleStates.Circles then
+	if self.settings.noduleStates.Circles and #self.data.circles > 0  then -- dont dispaly circles unless there are some
+		--CPrint("Building Circles nodule")
+		ctrl, w = self:BuildItem("CirclesNodule", "CirclesView", container)
+		ctrl:SetAnchorPoints(0, 0, 0, 1)
+		ctrl:SetAnchorOffsets(currentWidth, 0, currentWidth + w, 0)
+		currentWidth = currentWidth + w	
+		
 		local circlesCount = 0
 	 	for i = 1, #self.data.circles do			
 			ctrl, w = self:BuildItem("CircleNodule", "Circle_" .. i, container)
@@ -258,10 +269,15 @@ function EzSocialBar:BuildSocialBar()
 		end	
 	end	
 	
-	-- Now we know how long to container is, we can adjust the poisition of the acctual mainContainer
+	--set the background
+	--self.background:SetAnchorOffsets(0, 0, currentWidth, 0)
+		
+	-- Now we know how long to container is, we can adjust the poisition of
+	--the acctual mainContainer
 	--   according to the users settins, position should not be lost	
-	self.IsBarLoaded = true --
+	self.IsBarLoaded = true --	
 	self.settings.position.right = self.settings.position.left + currentWidth + 40, -- 40 for mail container? 
+	--CPrint(string.format("Width: w%i cw: r:%i", currentWidth, self.settings.position.right))
 	self:ApplySettings()
 end 
 
@@ -283,8 +299,9 @@ function EzSocialBar:EzSlashCommand(sCmd, sInput)
 	local s = string.lower(sInput)
 	
 	if s == nil or s == "" then
-		CPrint("EzSocial Addon")
-		CPrint("do /ezs options for options menu")
+		CPrint("EzSocial Bar Addon")
+		CPrint("/ezs dump to view the changelog")
+		CPrint("/ezs options for options menu")
 		
 	-- Options
 	elseif s == "reset" then
@@ -309,6 +326,9 @@ function EzSocialBar:EzSlashCommand(sCmd, sInput)
 		self.settings.displayBackground = not self.settings.displayBackground
 		self:ApplySettings()
 		
+	elseif s == "changelog" then
+		self:DumpChangelog()	
+		
 	-- Toggle Sound
 	elseif s == "sounds" then
 		self.settings.playSound = not self.settings.playSound	
@@ -322,6 +342,11 @@ function EzSocialBar:EzSlashCommand(sCmd, sInput)
 	elseif s == "notifications" then
 		self.settings.enableNotifications = not self.settings.enableNotifications	
 	end		
+end
+
+function EzSocialBar:OnInterfaceMenuListHasLoaded()
+	--Event_FireGenericEvent("InterfaceMenuList_NewAddOn", 
+		--"EzSocialBar", {"ShowOptions", "", "CRB_BasekitIcon:kitIcon_Holo_Social"})
 end
 
 -----------------------------------------------------------------------------------------------
@@ -421,7 +446,7 @@ function EzSocialBar:UpdateInterface()
 	if self.settings.noduleStates.Circles then		
 		for i = 1, #self.data.circles do			
 			local wnd = self.mainContainer:FindChild("Circle_"..i)				
-			wnd:SetText(string.format("%u", self.data.circles[i].count))
+			wnd:FindChild("Text"):SetText(string.format("%u", self.data.circles[i].count))
 			wnd:SetTooltip(self.data.circles[i].name)
 		end
 	end
@@ -449,7 +474,7 @@ function EzSocialBar:UpdateData()
 	end
 
 	-- Next Guilds
-	if self.settings.noduleStates.Guild or self.noduleStates.Circles then
+	if self.settings.noduleStates.Guild or self.settings.noduleStates.Circles then
 		local guild = nil
 		local circle = 1
 		
