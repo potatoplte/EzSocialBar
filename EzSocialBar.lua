@@ -162,6 +162,14 @@ function EzSocialBar:ApplySettings()
 	else
 		self.background:Show(false)
 	end	
+	
+	-- show Mail	
+	if self.settings.showMail then
+		self.mailControl:Show(true)
+	else
+		self.mailControl:Show(false)
+	end	
+	
 			
 	--set the position of the window
 	self.mainContainer:SetAnchorOffsets(
@@ -178,12 +186,16 @@ function EzSocialBar:OnDocLoaded()
 	if self.xmlDoc ~= nil and self.xmlDoc:IsLoaded() then
 	    self.mainContainer = Apollo.LoadForm(self.xmlDoc, "EzSocialBarForm", nil, self)				
 	    self.mainContainer:Show(true)	
+		
 		self.background = self.mainContainer:FindChild("SocialbarBackground")
 		self.mailControl = self.mainContainer:FindChild("MailNodule")
+		
 		self.notificationsWindow = self.mainContainer:FindChild("EzSocialNotification")
+		self.notificationsWindow:Show(false)		
+		
 		self.optionsWindow = Apollo.LoadForm(self.xmlDoc, "EzSocialSettingsForm", nil, self)
 		self.optionsWindow:Show(false)
-		self.notificationsWindow:Show(false)		
+				
 		self:SetMailIcon(0)
 
 		--timer handlers		
@@ -195,16 +207,12 @@ function EzSocialBar:OnDocLoaded()
 		Apollo.StopTimer("EzUpdateTimer")
 
 		-- Register for some Events
-		Apollo.RegisterEventHandler("InterfaceMenuListHasLoaded", "OnInterfaceMenuListHasLoaded", self)
-		
+		Apollo.RegisterEventHandler("InterfaceMenuListHasLoaded", "OnInterfaceMenuListHasLoaded", self)		
 		Apollo.RegisterEventHandler("FriendshipUpdateOnline", "OnFriendshipUpdateOnline", self)	
 		Apollo.RegisterEventHandler("FriendshipInvitesRecieved", "OnFriendshipRequest", self)		
 		Apollo.RegisterEventHandler("FriendshipAccountInvitesRecieved", "OnFriendshipAccountInvitesRecieved", self)
-		
-					
-		self:UpdateData()
-		self:BuildSocialBar()
-		self:UpdateInterface()
+							
+		self:Rebuild()
 		Apollo.StartTimer("EzUpdateTimer")	
 
 	end
@@ -269,13 +277,9 @@ function EzSocialBar:BuildSocialBar()
 		end	
 	end	
 	
-	--set the background
-	--self.background:SetAnchorOffsets(0, 0, currentWidth, 0)
-		
 	-- Now we know how long to container is, we can adjust the poisition of
 	--the acctual mainContainer
-	--   according to the users settins, position should not be lost	
-	self.IsBarLoaded = true --	
+	--   according to the users settins, position should not be lost
 	self.settings.position.right = self.settings.position.left + currentWidth + 40, -- 40 for mail container? 
 	--CPrint(string.format("Width: w%i cw: r:%i", currentWidth, self.settings.position.right))
 	self:ApplySettings()
@@ -290,6 +294,12 @@ function EzSocialBar:BuildItem(type, name, parent)
 	
 	newItem:SetName(name)
 	return newItem, newItem:GetWidth()
+end
+
+function EzSocialBar:Rebuild()
+	self:UpdateData()
+	self:BuildSocialBar()
+	self:UpdateInterface()
 end
 
 -----------------------------------------------------------------------------------------------
@@ -340,7 +350,12 @@ function EzSocialBar:EzSlashCommand(sCmd, sInput)
 		
 	-- Notifications toggle 
 	elseif s == "notifications" then
-		self.settings.enableNotifications = not self.settings.enableNotifications	
+		self.settings.enableNotifications = not self.settings.enableNotifications
+			
+	elseif s == "notify" then
+		self:SetNotification("This is a test Notification")
+
+
 	end		
 end
 
@@ -359,13 +374,13 @@ function EzSocialBar:SetNotification(text)
 	end
 	
 	if text == nil or text == "" then		
-		self.notificationWindow:Show(false)
+		self.notificationsWindow:Show(false)
 		return
 	end
 	
 	-- show a notification
-	self.notificationWindow:Show(true)
-	self.notification:SetText(text)
+	self.notificationsWindow:Show(true)
+	self.notificationsWindow:FindChild("NotificationText"):SetText(text)
 	Apollo.StartTimer("NotificationTimer")
 	
 	if self.settings.playSound then 
@@ -413,12 +428,7 @@ end
 -- EzSocialBar UpdateValues
 -----------------------------------------------------------------------------------------------
 function EzSocialBar:OnEzTimerTick()
-	self:UpdateData()
-	
-	if not self.IsBarLoaded then
-		self:BuildSocialBar()
-	end	
-	
+	self:UpdateData()	
 	self:UpdateInterface()
 end
 
@@ -445,9 +455,12 @@ function EzSocialBar:UpdateInterface()
 	--Update Circles interface
 	if self.settings.noduleStates.Circles then		
 		for i = 1, #self.data.circles do			
-			local wnd = self.mainContainer:FindChild("Circle_"..i)				
-			wnd:FindChild("Text"):SetText(string.format("%u", self.data.circles[i].count))
-			wnd:SetTooltip(self.data.circles[i].name)
+			local wnd = self.mainContainer:FindChild("Circle_"..i)
+			
+			if wnd ~= nil then						
+				wnd:FindChild("Text"):SetText(string.format("%u", self.data.circles[i].count))
+				wnd:SetTooltip(self.data.circles[i].name)
+			end
 		end
 	end
 	
@@ -643,22 +656,26 @@ function EzSocialBar:OnNotificationsToggle( wndHandler, wndControl, eMouseButton
 	self.settings.enableNotifications = wndControl:IsChecked()
 	self:ApplySettings()
 end
+function EzSocialBar:OnMailToggle( wndHandler, wndControl, eMouseButton )
+	self.settings.showMail = wndControl:IsChecked()
+	self:ApplySettings()
+end
 
 function EzSocialBar:OnOptionsClose( wndHandler, wndControl, eMouseButton )
 	self.optionsWindow:Show(false)
 end
 
 function EzSocialBar:OnShowFriendsToggle( wndHandler, wndControl, eMouseButton )
-	self.settings.noduleStates.Friends = wndControl:IsChecked()
-	self.IsBarLoaded = false
+	self.settings.noduleStates.Friends = wndControl:IsChecked()	
+	self:Rebuild()
 end
 function EzSocialBar:OnShowGuildToggle( wndHandler, wndControl, eMouseButton )
 	self.settings.noduleStates.Guild = wndControl:IsChecked()
-	self.IsBarLoaded = false
+	self:Rebuild()
 end
 function EzSocialBar:OnShowCirclesToggle( wndHandler, wndControl, eMouseButton )
 	self.settings.noduleStates.Circles = wndControl:IsChecked()
-	self.IsBarLoaded = false
+	self:Rebuild()
 end
 
 -----------------------------------------------------------------------------------------------
