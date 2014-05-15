@@ -345,8 +345,8 @@ function EzSocialBar:EzSlashCommand(sCmd, sInput)
 end
 
 function EzSocialBar:OnInterfaceMenuListHasLoaded()
-	--Event_FireGenericEvent("InterfaceMenuList_NewAddOn", 
-		--"EzSocialBar", {"ShowOptions", "", "CRB_BasekitIcon:kitIcon_Holo_Social"})
+	Event_FireGenericEvent("InterfaceMenuList_NewAddOn", 
+		"EzSocialBar", {"ShowOptions", "", "CRB_BasekitIcon:kitIcon_Holo_Social"})
 end
 
 -----------------------------------------------------------------------------------------------
