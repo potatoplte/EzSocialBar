@@ -60,6 +60,21 @@ function table.reverse ( tab )
     return newTable
 end
 
+function deepcopy(orig)
+    local orig_type = type(orig)
+    local copy
+    if orig_type == 'table' then
+        copy = {}
+        for orig_key, orig_value in next, orig, nil do
+            copy[deepcopy(orig_key)] = deepcopy(orig_value)
+        end
+        setmetatable(copy, deepcopy(getmetatable(orig)))
+    else -- number, string, boolean, etc
+        copy = orig
+    end
+    return copy
+end
+
 --Default Settings
 local DefaultSettings = {	
 		--position of the window
@@ -86,6 +101,7 @@ local DefaultSettings = {
 		enableNotifications = true,
 		isResizeable = false,
 		showMail = true,
+		showWelcomeMessage = true,
 	}
 	
 local LoadingState = { Unloaded = 1, Restore = 2, Loaded = 4 }	
@@ -99,7 +115,7 @@ function EzSocialBar:new(o)
 	self.LoadingState = LoadingState.Unloaded	
 		
     -- varaibles holding display data
-	self.settings = nil			
+	self.settings = deepcopy(DefaultSettings)			
 	self.data = {
 		onlineFriendsCount = 0,
 		accountOnlineFriendsCount = 0,
@@ -137,12 +153,17 @@ function EzSocialBar:OnRestore(eType, tData)
 	end		
 
 	--Load in settings
-	self.settings = DefaultSettings 	
+	--self.settings = DefaultSettings 	
 	for Dkey, Dvalue in pairs(self.settings) do
 		if tData[Dkey] ~= nil then
 			self.settings[Dkey] = tData[Dkey]
 		end
 	end		
+	
+	if self.LoadingState == LoadingState.Loaded then
+		-- we have already loaded a defualt bar, rebuild with new settings
+		self:Rebuild()
+	end	
 end
 
 -----------------------------------------------------------------------------------------------
@@ -177,6 +198,10 @@ function EzSocialBar:ApplySettings()
 	 	self.settings.position.top,
 		self.settings.position.right,
 	 	self.settings.position.bottom)
+	
+	--local l,t,r,b = self.mainContainer:GetAnchorOffsets()
+	--CPrint(string.format("offsets: l:%i t:%i b:%i r:%i", l, t, r, b))
+
 end
 
 -----------------------------------------------------------------------------------------------
@@ -196,10 +221,8 @@ function EzSocialBar:OnDocLoaded()
 		self.optionsWindow = Apollo.LoadForm(self.xmlDoc, "EzSocialSettingsForm", nil, self)
 		self.optionsWindow:Show(false)
 				
-		self:SetMailIcon(0)
-
 		--timer handlers		
-		Apollo.CreateTimer("EzUpdateTimer", 1, true)
+		Apollo.CreateTimer("EzUpdateTimer", 5, true)
 		Apollo.CreateTimer("NotificationTimer", 10.0, false)		
 		Apollo.RegisterTimerHandler("NotificationTimer", "OnNotificationTimerTick", self)
 		Apollo.RegisterTimerHandler("EzUpdateTimer", "OnEzTimerTick", self)		
@@ -207,30 +230,23 @@ function EzSocialBar:OnDocLoaded()
 		Apollo.StopTimer("EzUpdateTimer")
 
 		-- Register for some Events
-		Apollo.RegisterEventHandler("InterfaceMenuListHasLoaded", "OnInterfaceMenuListHasLoaded", self)		
 		Apollo.RegisterEventHandler("FriendshipUpdateOnline", "OnFriendshipUpdateOnline", self)	
 		Apollo.RegisterEventHandler("FriendshipInvitesRecieved", "OnFriendshipRequest", self)		
 		Apollo.RegisterEventHandler("FriendshipAccountInvitesRecieved", "OnFriendshipAccountInvitesRecieved", self)
+		Apollo.RegisterEventHandler("GuildChange", "OnGuildChanged", self)
 							
 		self:Rebuild()
-		Apollo.StartTimer("EzUpdateTimer")	
-
+		self:SetMailIcon(0)
+		self:SetFriendsPending(0)
+		Apollo.StartTimer("EzUpdateTimer")		
+		self.LoadingState = LoadingState.Loaded		
+		
+		if self.settings.showWelcomeMessage then
+			CPrint("Thank you for downloading the EzSocial Bar.")
+			CPrint("please use /ezs options to configure this addon and hide this message")
+			CPrint("Update 0.9a: If you cannot see your bar after the update, please do /ezs reset")
+		end
 	end
-end
-
-function EzSocialBar:OnEzLoaderTimerExpire()
-	CPrint("EzLoaderTimer")
-	if self.AreSettingsLoaded then
-		-- all is ok!
-		Apollo.StopTimer("EzLoaderTimer")
-		return
-	end
-	
-	-- no settings have been loaded
-	-- start the main timing loop	, apply default settings and go
-	Apollo.StartTimer("EzUpdateTimer")
-	self.settings = DefaultSettings
-	self:ApplySettings()	
 end
 
 function EzSocialBar:BuildSocialBar()
@@ -280,7 +296,7 @@ function EzSocialBar:BuildSocialBar()
 	-- Now we know how long to container is, we can adjust the poisition of
 	--the acctual mainContainer
 	--   according to the users settins, position should not be lost
-	self.settings.position.right = self.settings.position.left + currentWidth + 40, -- 40 for mail container? 
+	self.settings.position.right = self.settings.position.left + currentWidth + 40 -- 40 for mail container? 
 	--CPrint(string.format("Width: w%i cw: r:%i", currentWidth, self.settings.position.right))
 	self:ApplySettings()
 end 
@@ -297,9 +313,12 @@ function EzSocialBar:BuildItem(type, name, parent)
 end
 
 function EzSocialBar:Rebuild()
+	--CPrint("Rebuilding social bar")
+	Apollo.StopTimer("EzUpdateTimer")
 	self:UpdateData()
 	self:BuildSocialBar()
 	self:UpdateInterface()
+	Apollo.StartTimer("EzUpdateTimer")
 end
 
 -----------------------------------------------------------------------------------------------
@@ -310,14 +329,14 @@ function EzSocialBar:EzSlashCommand(sCmd, sInput)
 	
 	if s == nil or s == "" then
 		CPrint("EzSocial Bar Addon")
-		CPrint("/ezs dump to view the changelog")
 		CPrint("/ezs options for options menu")
+		CPrint("/ezs reset to reset the addon")
 		
 	-- Options
 	elseif s == "reset" then
-		self.settings = DefaultSettings
-		self.IsBarLoaded = false
-		self:ApplySettings()
+		CPrint("Reseting EzSocial bar")
+		self.settings = deepcopy(DefaultSettings)
+		self:Rebuild()
 		
 	-- Options
 	elseif s == "options" then
@@ -326,42 +345,13 @@ function EzSocialBar:EzSlashCommand(sCmd, sInput)
 	-- Lock / Unlock Commands
 	elseif s == "lock" then
 		self.settings.isLocked = true
-		self:ApplySettings()		
+		self:ApplySettings()
+				
 	elseif s == "unlock" then
 		self.settings.isLocked = false
 		self:ApplySettings()
-	
-	-- Toggle background
-	elseif s == "background" then
-		self.settings.displayBackground = not self.settings.displayBackground
-		self:ApplySettings()
 		
-	elseif s == "changelog" then
-		self:DumpChangelog()	
-		
-	-- Toggle Sound
-	elseif s == "sounds" then
-		self.settings.playSound = not self.settings.playSound	
-		if self.settings.playSound then
-			CPrint("Sounds Enabled")
-		else
-			CPrint("Sounds Disabled")		
-		end
-		
-	-- Notifications toggle 
-	elseif s == "notifications" then
-		self.settings.enableNotifications = not self.settings.enableNotifications
-			
-	elseif s == "notify" then
-		self:SetNotification("This is a test Notification")
-
-
-	end		
-end
-
-function EzSocialBar:OnInterfaceMenuListHasLoaded()
-	Event_FireGenericEvent("InterfaceMenuList_NewAddOn", 
-		"EzSocialBar", {"ShowOptions", "", "CRB_BasekitIcon:kitIcon_Holo_Social"})
+	end	
 end
 
 -----------------------------------------------------------------------------------------------
@@ -403,8 +393,13 @@ end
 -- EzSocialBar SetFriendsPending
 -----------------------------------------------------------------------------------------------
 function EzSocialBar:SetFriendsPending(nFriends)
-	local friendsRotateyThingy = self.friendsControl:FindChild("invites")
-	local friendsPendingCtrl = self.friendsControl:FindChild("friendsPending")
+	local friendsControl = self.mainContainer:FindChild("FriendsView")
+	if not self.settings.noduleStates.Friends or friendsControl == nil then
+		return
+	end
+	
+	local friendsRotateyThingy = friendsControl:FindChild("rotateythingy")
+	local friendsPendingCtrl = friendsControl:FindChild("Pending")
 	
 	if nFriends == 0 then
 		friendsRotateyThingy:Show(false)
@@ -413,6 +408,10 @@ function EzSocialBar:SetFriendsPending(nFriends)
 		friendsRotateyThingy:Show(true)
 		friendsPendingCtrl:Show(true)
 		friendsPendingCtrl:SetText(nFriends .. "")
+		
+		if self.settings.playSound then 
+			Sound.Play(Sound.PlayUISocialFriendAlert)
+		end		
 	end	
 end
 
@@ -465,12 +464,14 @@ function EzSocialBar:UpdateInterface()
 	end
 	
 	--Mail
-	self:SetMailIcon(self.data.UnreadMessages)	
+	self:SetMailIcon(self.data.UnreadMessages)
+	self:CalcFriendInvites(0)	
 	
 end
 function EzSocialBar:UpdateData()	
 	-- First Friends, only bother to update if we are showing the values	
 	if self.settings.noduleStates.Friends then	
+		--CPrint("Updating Friends Data")
 		self.data.onlineFriendsCount = 0
 		self.data.accountOnlineFriendsCount = 0
 		
@@ -488,6 +489,7 @@ function EzSocialBar:UpdateData()
 
 	-- Next Guilds
 	if self.settings.noduleStates.Guild or self.settings.noduleStates.Circles then
+		--CPrint("Updating Circle and Guild data")
 		local guild = nil
 		local circle = 1
 		
@@ -597,7 +599,7 @@ function EzSocialBar:OnGuildButtonDown( wndHandler, wndControl, eMouseButton )
 end
 
 function EzSocialBar:OnCircleButtonDown( wndHandler, wndControl, eMouseButton )	
-	Event_FireGenericEvent("GenericEvent_OpenCirclesPanel") --TODO: can this be fixed?
+	Event_FireGenericEvent("GenericEvent_InitializeCircles") --TODO: can this be fixed?
 end
 
 -- has clicked the notification, register as seen and hide
@@ -617,6 +619,10 @@ function EzSocialBar:OnFormMove( wndHandler, wndControl, nOldLeft, nOldTop, nOld
 	self.settings.position.bottom = b	
 end
 
+function EzSocialBar:OnGuildChanged()
+	self:Rebuild()
+end
+
 -----------------------------------------------------------------------------------------------
 -- EzSocial Options
 -----------------------------------------------------------------------------------------------
@@ -629,6 +635,7 @@ function EzSocialBar:ShowOptions()
 	self.optionsWindow:FindChild("toggleSounds"):SetCheck(self.settings.playSound)
 	self.optionsWindow:FindChild("toggleNotifications"):SetCheck(self.settings.enableNotifications)
 	self.optionsWindow:FindChild("toggleMail"):SetCheck(self.settings.showMail)
+	self.optionsWindow:FindChild("toggleWelcome"):SetCheck(self.settings.showWelcomeMessage)
 	
 	self.optionsWindow:FindChild("ShowFriends"):SetCheck(self.settings.noduleStates.Friends)
 	self.optionsWindow:FindChild("ShowGuild"):SetCheck(self.settings.noduleStates.Guild)
@@ -660,9 +667,8 @@ function EzSocialBar:OnMailToggle( wndHandler, wndControl, eMouseButton )
 	self.settings.showMail = wndControl:IsChecked()
 	self:ApplySettings()
 end
-
-function EzSocialBar:OnOptionsClose( wndHandler, wndControl, eMouseButton )
-	self.optionsWindow:Show(false)
+function EzSocialBar:OnWelcomeToggle( wndHandler, wndControl, eMouseButton )
+	self.settings.showWelcomeMessage = wndControl:IsChecked()
 end
 
 function EzSocialBar:OnShowFriendsToggle( wndHandler, wndControl, eMouseButton )
@@ -676,6 +682,10 @@ end
 function EzSocialBar:OnShowCirclesToggle( wndHandler, wndControl, eMouseButton )
 	self.settings.noduleStates.Circles = wndControl:IsChecked()
 	self:Rebuild()
+end
+
+function EzSocialBar:OnOptionsClose( wndHandler, wndControl, eMouseButton )
+	self.optionsWindow:Show(false)
 end
 
 -----------------------------------------------------------------------------------------------
