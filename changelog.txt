@@ -1,18 +1,22 @@
--- Version 0.8d --
-[*] Fixed a crash when a friend comes online
+-- Version 0.9a --
+[*] Total Overhaul of the UI, you may now choose what is shown and what is not, e.g. circles, friends and guild
+[*] Few crashes fixes for notifications
+[*] Circles will now only display if you belong to at least one circle, 
+	and it will only show the ones you have membership with
+
+Developer Note: There will be bugs, this is still a beta build. The UI is now functioning as i intended it to.
+This means fixes for crashes and errors will come hot and fast as they are reported. See the Known issues.
+If problems are encvountered, please report them on the Curse page, or preferably on my GITHub https://github.com/almostCrimzon/EzSocialBar 
+
 
 -- Slash Commands --
 
 /ezs options - opens the options menu
+/ezs reset - revert to default options and positioning
 
--- all slash commands are avalaible via the options menu --
-/ezs lock
-/ezs unlock
-/ezs background - toggles background on and off
-/ezs sounds - toggles sounds on and off
-/ezs notifications - toggles notificcations on and off
+-- Known issues --
+1. When applying new settings to the bar, the mail icon will become active for a few seconds with 99 mail
 
 --Wishlist--
-
 1. Notifications above OR below the bar
-2. Smart circles - dont show empty circles, only owned circles 
+2. have other requests? make them on my GITHub :)
